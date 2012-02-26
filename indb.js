@@ -1,10 +1,12 @@
-(function($){
+(function($) {
 
 var indexedDB = window.indexedDB || window.webkitIndexedDB || window.mozIndexedDB || window.msIndexedDB;
 var idbTransaction = window.webkitIDBTransaction || window.IDBTransaction;
+var idbKeyRange = window.webkitIDBKeyRange || window.IDBKeyRange;
+var idbCursor = window.webkitIDBCursor || window.IDBCursor;
 
 var factory = function() {
-    return function(options){
+    return function(options) {
         options = options || {};
 
         return this.__ctor(options);
@@ -13,7 +15,7 @@ var factory = function() {
 
 window.store = factory();
 
-window.request = function(req){
+window.request = function(req) {
     return this.__ctor(req);
 };
 
@@ -22,8 +24,8 @@ window.inDB = factory();
 var eventListener = factory();
 
 eventListener.prototype = {
-    add: function(name, event){
-        if(!event){
+    add: function(name, event) {
+        if(!event) {
             throw 'empty event';
         }
         var ents = this.events = this.events || {};
@@ -33,7 +35,7 @@ eventListener.prototype = {
 
         return this;
     },
-    push: function(name, event, scope){
+    push: function(name, args, scope) {
         var ents = this.events = this.events || {};
         var list = ents[name] = (ents[name] || []).slice();
         var len = list.length;
@@ -43,24 +45,60 @@ eventListener.prototype = {
         {
             var action = list[i];
 
-            action.call(scope || _this, event);
+            if(args instanceof Array)
+                action.apply(scope || _this, args);
+            else
+                action.call(scope || _this, args);
         }
         return this;
     },
-    del: function(event){
+    del: function(name, event) {
         var ents = this.events = this.events || {};
         var list = ents[name] = ents[name] || [];
-        list.remove(event);
+        var index = list.indexOf(event);
+        
+        if(index > -1)
+            list.splice(index, 1);
+            
+        if(list.length <= 0)
+            delete ents[name];
         
         return this;
     },
-    __ctor: function(){
+    __ctor: function() {
         this.events = this.events || {};
 
         return this;
     }
-},
+};
 
+var query = function(options){
+    return this.__ctor(options);
+};
+query.prototype = {
+    lowerBound: function(name, lower, lowerOpen){
+        this.cursor = this.store.index(name).openCursor(idbKeyRange.lowerBound(lower, lowerOpen));
+        return this;
+    },
+    upperBound: function(name, upper, upperOpen){
+        this.cursor = this.store.index(name).openCursor(idbKeyRange.upperBound(upper, upperOpen));
+        return this;
+    },
+    only: function(name, value){
+        this.cursor = this.store.index(name).openCursor(idbKeyRange.only(value));
+        return this;
+    },
+    bound: function(name, lower, upper, lowerOpen, upperOpen){
+        this.cursor = this.store.index(name).openCursor(idbKeyRange.bound(lower, upper, lowerOpen, upperOpen));
+        return this;
+    },
+    __ctor: function(store){
+        this.store = store;
+    },
+    toKeyRange: function(){
+        return this.cursor || null;
+    }
+};
 
 window.store.prototype = {
     createIndex: function(name, options) {
@@ -95,10 +133,34 @@ window.store.prototype = {
 
         return new request( idb.deleteObjectStore(this.store.name) );
     },
-    get: function() {
-        return new request(this.store.get.apply(this.store, arguments));
+    put: function(val, key){
+        return new request(this.store.put(val, key));
     },
-    __ctor: function(options){
+    cursorFromQuery: function(apply){
+        return apply(new query(this.store)).toKeyRange();
+    },
+    get: function() {
+        var result;
+        
+        this.currentRequest = null;
+
+        if(arguments.length == 1 && !isFunction(arguments[0]))
+            result = new request(this.store.get(arguments[0]));
+        if(arguments.length == 1 && isFunction(arguments[0]))
+            result = new requestCursor(this.cursorFromQuery(arguments[0]) || this.store.openCursor(null, idbCursor.PREV));
+        if(arguments.length == 2)
+            result = new request(this.store.index(arguments[0]).get(arguments[1]));
+        if(arguments.length <= 0) {
+            result = new requestCursor(this.store.openCursor(null, idbCursor.PREV));
+        }
+        
+        this.currentRequest = result;
+
+        return result;
+    },
+    __ctor: function(options) {
+
+        this.eventListener = new eventListener();
 
         for(var o in options) {
             this[o] = options[o];
@@ -109,34 +171,57 @@ window.store.prototype = {
 };
 
 window.request.prototype = {
-    error: function(error){
+    error: function(error) {
         this.eventListener.add('error', error);
         return this;
     },
-    success: function(success){
-        this.eventListener.add('success', success);
+    where: function(predicate) {
+        this.context.predicate = predicate;
+
         return this;
     },
-    add: function(req){
+    success: function(success) {
+        this.eventListener.add('success', success);
+
+        return this;
+    },
+    add: function(req) {
         var _this = this;
 
-        each(['error', 'success'], function(i, label){
+        each(['error', 'success'], function(i, label) {
 
             //req.addEventListener does not work in FF
-            req['on' + label] = function(event){
+            req['on' + label] = function(event) {
                 _this._push(label, event, req);
             };
 
         });
+
+        return this;
+    },
+    ended: function(action){
+        var _this = this;
+        var handler = function(){
+            _this.eventListener.del('end', handler);
+
+            action(_this.context);
+        };
+
+        this.eventListener.add('end', handler);
+
+        return this;
+    },
+    start: function(action){
+        action(this.context);
         
         return this;
     },
-    _push: function(label, event, scope){
-        this.eventListener.push(label, event, scope)
+    _push: function(label, event, req) {
+        this.eventListener.push(label, [event, this.context], req);
     },
-    __ctor: function(req){
+    __ctor: function(req) {
         this.eventListener = new eventListener();
-        this.requests = [];
+        this.context = {};
         
         if(!req) {return this;}
 
@@ -146,6 +231,51 @@ window.request.prototype = {
     }
 };
 
+var requestCursor = function(req) {
+    return this.__ctor(req);
+}; 
+
+requestCursor.prototype = new request();
+
+requestCursor.prototype.success = function(success) {
+    var _this = this;
+    var timer;
+    var rebuildTimer = function(cursor){
+        if(timer)
+            clearTimeout(timer);
+        timer = setTimeout(function(){
+            if(!cursor)
+                _this.eventListener.push('end');
+            else
+                rebuildTimer();
+        }, 1);
+    };
+
+    this.eventListener.add('success', function(event) {
+        var cursor = event.target.result;
+        var store = event.target.source;
+
+        rebuildTimer(cursor);
+        
+        if (cursor) {
+
+            //var readyState = event.target.readyState;
+
+            if(!_this.context || !_this.context.predicate || _this.context.predicate(cursor.value))
+                success.call(this, event, _this.context);
+            
+            //if(readyState == 2 /*DONE*/) // it does not werk readyState always 2 (DONE)
+            //    _this.eventListener.push('end');
+            //});            
+
+            cursor.continue();
+        }
+    });
+
+    return this;
+};
+
+
 window.inDB.prototype = {
     
     init: function(init) {
@@ -153,7 +283,7 @@ window.inDB.prototype = {
 
         return this;
     },
-    each: function(action){
+    each: function(action) {
         var idb = this.idb;
         var stores = idb.objectStoreNames;
         var len = stores.length;
@@ -254,23 +384,23 @@ window.inDB.prototype = {
 
         var openRequest = indexedDB.open(this.name, this.version);
 
-        openRequest.onversionchange = function(event){_this._versionChange(event);};
-        openRequest.onupgradeneeded = function(event){
+        openRequest.onversionchange = function(event) {_this._versionChange(event);};
+        openRequest.onupgradeneeded = function(event) {
             _this.idb = event.target.result;
             
             _this._upgradeNeeded(event);
         };
         
         return new request(openRequest)
-            .error( function(event){_this.error(event);} )
-            .success( function(event){
+            .error( function(event) {_this.error(event);} )
+            .success( function(event) {
                 var idb = _this.idb = this.result || event.result;
 
                 if(idb.setVersion && idb.version !== _this.version) {
 
                     _this.setVersion(_this.version)
-                        .success(function(event){_this._init(event);})
-                        .error(function(event){_this.error(event);});
+                        .success(function(event) {_this._init(event);})
+                        .error(function(event) {_this.error(event);});
                 }else {
                     _this._init(event);
                 }
@@ -285,7 +415,7 @@ window.inDB.prototype = {
 
 $ = $ || {};
 
-$.inDB = function(options){
+$.inDB = function(options) {
     return new inDB(options);
 };
 
@@ -298,6 +428,10 @@ var each = function (array, action, options) {
     {
         action.call(clone[i], i, clone[i], options);
     }
+}
+
+var isFunction = function (obj) {
+ return obj && ({}).toString.call(obj) == '[object Function]';
 }
 
 })(window['jQuery']);
