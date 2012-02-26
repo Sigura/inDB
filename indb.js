@@ -269,7 +269,7 @@ window.request.prototype = {
     add: function(req) {
         var _this = this;
         
-        each(['error', 'success'], function(i, label) {
+        each(['error', 'success'], function(label, i) {
 
             //req.addEventListener does not work in FF
             req['on' + label] = function(event) {
@@ -527,7 +527,7 @@ var each = function (array, action, options) {
     
     for(var i = 0; i < len; ++i)
     {
-        action.call(clone[i], i, clone[i], options);
+        action.call(clone[i], clone[i], i, options);
     }
 }
 

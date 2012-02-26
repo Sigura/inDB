@@ -16,20 +16,16 @@ var init = function(event) {
         .createIndex('age', { unique: false })
         .createIndex('email', { unique: true })
         .add(customerData)
-        .error(function(event) {
-            console.error('add error', event);
-        })
+        .error(errorHandler)
         .success(function(event) {
             console.info('add success', event);
         });
 
 };
+var errorHandler = function(event) { console.error('get error', event); };
 
 var $db = new inDB({ name: 'testDatabase', version: 42 })
-.error(function(event) {
-
-    console.error('db error', event);
-})
+.error(errorHandler)
 //before ready
 .init(init)
 .versionChange( function(event) {
@@ -54,33 +50,18 @@ var $db = new inDB({ name: 'testDatabase', version: 42 })
 
     var $store = this.openStore('customers', this.readWrite);
     var tdd = { ssn: '000-00-0000', name: 'for tdd', age: 100, email: 'tdd@company.com' };
+    var listenEvent = ['insert', 'insertd', 'update', 'updated', 'delete', 'deleted'];
     
-    $store.eventListener
-        .add('insert', function(event){
-            console.log('insert', event);
-        })
-        .add('inserted', function(event){
-            console.log('inserted', event);
-        })
-        .add('update', function(event){
-            console.log('update', event);
-        })
-        .add('updated', function(event){
-            console.log('updated', event);
-        })
-        .add('delete', function(event){
-            console.log('delete', event);
-        })
-        .add('deleted', function(event){
-            console.log('deleted', event);
+    listenEvent.forEach(function(label, i){
+        $store.eventListener.add(label, function(event){
+            console.log(label, event);
         });
-    
+    });
+
     $store
         //get by key
         .get('444-44-4444')
-        .error(function(event) {
-            console.error('get error', event);
-        })
+        .error(errorHandler)
         .success(function(event) {
             var customer = this.result;
 
@@ -95,9 +76,7 @@ var $db = new inDB({ name: 'testDatabase', version: 42 })
     $store
         //get one by index
         .get('name', 'Artur')
-        .error(function(event) {
-            console.error('get error', event);
-        })
+        .error(errorHandler)
         .success(function(event) {
             console.info('found', this.result);
         });
@@ -109,9 +88,7 @@ var $db = new inDB({ name: 'testDatabase', version: 42 })
         .where(function(item){
             return item.age > 20 && item.email.substr(-8).toLowerCase() != 'home.org';
         })
-        .error(function(event) {
-            console.error('get error', event);
-        })
+        .error(errorHandler)
         //begin read
         .start(function(context) {
             console.time('get all');
@@ -140,9 +117,7 @@ var $db = new inDB({ name: 'testDatabase', version: 42 })
                     .bound('age', 30, 60, true, true); // all age 30 > x && < 60
                     //only one predicate by design index db, please use where after get
         })
-        .error(function(event) {
-            console.error('get error', event);
-        })
+        .error(errorHandler)
         //begin read
         .start(function(context) {
             context.result = [];
@@ -160,7 +135,7 @@ var $db = new inDB({ name: 'testDatabase', version: 42 })
 
             if(customer.ssn == '111-11-1111') {
 
-                customer.age = 18;
+                customer.age -= 10;
 
                 //only for cursor
                 context.update(customer);
