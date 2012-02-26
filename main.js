@@ -8,8 +8,6 @@ var customerData = [
 
 var init = function(event) {
 
-    //console.log(event);
-
     if(this.containts('customers'))
         return;
 
@@ -19,10 +17,10 @@ var init = function(event) {
         .createIndex('email', { unique: true })
         .add(customerData)
         .error(function(event) {
-            console.log('add error', event);
+            console.error('add error', event);
         })
         .success(function(event) {
-            console.log('add success', event);
+            console.info('add success', event);
         });
 
 };
@@ -30,7 +28,7 @@ var init = function(event) {
 var $db = new inDB({ name: 'testDatabase', version: 42 })
 .error(function(event) {
 
-    console.log('db error', event);
+    console.error('db error', event);
 })
 //before ready
 .init(init)
@@ -46,30 +44,45 @@ var $db = new inDB({ name: 'testDatabase', version: 42 })
 })
 .ready(function(event) {
 
-    console.log('db.name =', $db.name, '; db.version =', $db.version);
+    console.info('db.name =', $db.name, '; db.version =', $db.version);
 
     var storeNames = [];
     $db.each(function(storeName){
         storeNames.push(storeName);
     });
-    console.log('stores: ', storeNames.length > 0 ? storeNames.join(', ') : 'none');
+    console.info('stores: ', storeNames.length > 0 ? storeNames.join(', ') : 'none');
 
     var $store = this.openStore('customers', this.readWrite);
+    var tdd = { ssn: '000-00-0000', name: 'for tdd', age: 100, email: 'tdd@company.com' };
     
-    // var removeAll = function(){
-        // console.log('remove all');
-        // $store.remove();
-        // $db.remove();
-    // };
+    $store.eventListener
+        .add('insert', function(event){
+            console.log('insert', event);
+        })
+        .add('inserted', function(event){
+            console.log('inserted', event);
+        })
+        .add('update', function(event){
+            console.log('update', event);
+        })
+        .add('updated', function(event){
+            console.log('updated', event);
+        })
+        .add('delete', function(event){
+            console.log('delete', event);
+        })
+        .add('deleted', function(event){
+            console.log('deleted', event);
+        });
     
     $store
         //get by key
         .get('444-44-4444')
         .error(function(event) {
-            console.log('get error', event);
+            console.error('get error', event);
         })
         .success(function(event) {
-            console.log('444-44-4444 getted', this.result);
+            var customer = this.result;
 
             $store.del('555-55-5555')
                 .success(function(event){
@@ -83,65 +96,103 @@ var $db = new inDB({ name: 'testDatabase', version: 42 })
         //get one by index
         .get('name', 'Artur')
         .error(function(event) {
-            console.log('get error', event);
+            console.error('get error', event);
         })
         .success(function(event) {
-            console.log('found', this.result);
+            console.info('found', this.result);
         });
 
     $store
-        //get all
+        //get all. cursor way
         .get()
         //add filter, in future may be add support that - linq js
         .where(function(item){
             return item.age > 20 && item.email.substr(-8).toLowerCase() != 'home.org';
         })
         .error(function(event) {
-            console.log('get error', event);
+            console.error('get error', event);
         })
         //begin read
         .start(function(context) {
-            console.log('read begin');
+            console.time('get all');
             context.result = [];
         })
         //read ended
         .ended(function(context) {
-            console.log('read ended', context.result);
+            console.timeEnd('get all', context.result);
         })
         //read next, must be at the end in this case
         .success(function(event, context) {
-            console.log('result ', this.result.value);
+            var customer = this.result.value;
 
-            context.result.push(this.result.value);
+            console.info('result ', customer.ssn, customer);
+
+            context.result.push(customer);
         });
 
     $store
-        //get all by IDBKeyRange
+         // new transaction for update
+        .cloneTran()
+        //get all by IDBKeyRange. cursor way
         .get(function(query) {
              return query
                     //.lowerBound('name', 'Bill') // all name ≥ 'Bill'
                     .bound('age', 30, 60, true, true); // all age 30 > x && < 60
+                    //only one predicate by design index db, please use where after get
         })
         .error(function(event) {
-            console.log('get error', event);
+            console.error('get error', event);
         })
         //begin read
         .start(function(context) {
             context.result = [];
+            console.time('get all by IDBKeyRange');
         })
         //read ended
         .ended(function(context) {
-            console.log(context.result);
+            console.timeEnd('get all by IDBKeyRange', context.result);
         })
         //read next, must be at the end in this case
         .success(function(event, context) {
-            console.log('getted by IDBKeyRange', this.result.value);
-            
-            context.result.push(this.result.value);
+            var customer = this.result.value;
+
+            console.info('getted by IDBKeyRange', customer.ssn, customer);
+
+            if(customer.ssn == '111-11-1111') {
+
+                customer.age = 18;
+
+                //only for cursor
+                context.update(customer);
+            }
+
+
+            context.result.push(customer);
         });
 
+    $store
+        .cloneTran()
+        .add(tdd)
+        .success(function(event){
+    
+                // build new read only transaction
+                var $reStore = $db.openStore('customers', this.read);
 
+                $reStore.get(tdd.ssn)
+                    .success(function(event){
+                        console.log('added:', this.result.ssn, this.result);
+                        $store.cloneTran().del(this.result.ssn);
+                    });
+
+                // build new transaction as old store transaction
+                $store.cloneTran()
+                    .get('111-11-1111')
+                    .success(function(event){
+                        console.log('updated:', this.result.ssn, this.result);
+                    });
+
+    });
 });
 
 //setTimeout(function(e){console.log('init by timeout');$db._init(e);}, 2500);
-setTimeout(function(){$db.remove(); console.log('removed all by timeout');}, 10000);
+setTimeout(function(){$db.remove(); console.log('removed all by timeout');}, 5000);

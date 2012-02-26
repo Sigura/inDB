@@ -107,10 +107,35 @@ window.store.prototype = {
 
         return this;
     },
+    _add: function(val){
+        var _this = this;
+
+        this.eventListener.push('insert', {action: 'insert', val: val, store: this.store}, this);
+        
+        var req = this.store.add.apply(this.store, arguments);
+        
+        req.success = function(event) {
+            _this.eventListener.push('inserted', event, _this);
+        };
+        
+        return req;
+    },
+    clear: function(){
+        this.eventListener.push('delete-all', {action: 'delete-all', store: this.store}, this);
+        return new request(this.store.clear())
+            .success(function(event){
+                this.eventListener.push('deleted-all', event, this);
+            });
+    },
+    count: function(){
+        return new request(this.store.count());
+    },
     add: function(val) {
 
-        if(!(val instanceof Array))
-            return new request(this.store.add.apply(this.store, arguments));
+        if(!(val instanceof Array)) {
+            return new request(this._add(val));
+        }
+
 
         var clone = val.slice();
         var len = clone.length;
@@ -118,15 +143,22 @@ window.store.prototype = {
         
         for(var i = 0; i < len; i++) {
 
-            var req = this.store.add.call(this.store, clone[i]);
+            var req = this._add(clone[i]);
 
             result.add(req);
         }
 
         return result;
     },
-    del: function() {
-        return new request( this.store['delete'].apply(this.store, arguments) );
+    del: function(key) {
+        var _this = this;
+        
+        this.eventListener.push('delete', {action: 'delete', key: key, store: this.store}, this);
+
+        return new request( this.store['delete'].apply(this.store, arguments) )
+            .success(function(event){
+                _this.eventListener.push('deleted', event, _this);
+            });
     },
     remove: function() {
         var idb = this.db.idb;
@@ -134,7 +166,14 @@ window.store.prototype = {
         return new request( idb.deleteObjectStore(this.store.name) );
     },
     put: function(val, key){
-        return new request(this.store.put(val, key));
+        var _this = this;
+        var key = key || val[this.store.keyPath];
+        this.eventListener.push('update', {action: 'update', 'newVersion': val, store: this.store}, this);
+
+        return new request(this.store.put(val, key))
+            .success(function(event){
+                _this.eventListener.push('updated', event, _this);
+            });
     },
     cursorFromQuery: function(apply){
         return apply(new query(this.store)).toKeyRange();
@@ -158,13 +197,55 @@ window.store.prototype = {
 
         return result;
     },
+    complete: function(action) {
+        var _this = this;
+        
+        _this.eventListener.add('complete', action);
+
+        return this;
+    },
+    abort: function(action) {
+        var _this = this;
+        
+        _this.eventListener.add('abort', action);
+
+        return this;
+    },
+    error: function(action) {
+
+        var _this = this;
+        
+        _this.eventListener.add('error', action);
+
+        return this;
+    },
+    cloneTran: function(){
+        return new store({
+            store: this.db.idb.transaction([this.store.name], this.store.transaction.mode).objectStore(this.store.name),
+            db: this,
+            eventListener: this.eventListener
+        });
+    },
     __ctor: function(options) {
 
+        var _this = this;
         this.eventListener = new eventListener();
-
+        
         for(var o in options) {
             this[o] = options[o];
         }
+
+        this.store.transaction.oncomplete = function(event){
+            _this.eventListener.push('complete', event, _this);
+        };
+
+        this.store.transaction.onabort = function(event){
+            _this.eventListener.push('abort', event, _this);
+        };
+
+        this.store.transaction.onabort = function(event){
+            _this.eventListener.push('error', event, _this);
+        };
 
         return this;
     }
@@ -187,7 +268,7 @@ window.request.prototype = {
     },
     add: function(req) {
         var _this = this;
-
+        
         each(['error', 'success'], function(i, label) {
 
             //req.addEventListener does not work in FF
@@ -232,11 +313,27 @@ window.request.prototype = {
 };
 
 var requestCursor = function(req) {
-    return this.__ctor(req);
+    this.__ctor(req);
+
+    this.context = new this._contextCtr(this);
+    this.context.request = this;
 }; 
 
 requestCursor.prototype = new request();
 
+requestCursor.prototype._contextCtr = function(req){this.request = req};
+requestCursor.prototype._contextCtr.prototype = {
+    update: function(val){
+        var _this = this;
+        this.request.eventListener.push('update', {action: 'update', 'newVersion': val, store: this.request.store}, this.request);
+
+        return new request(this.cursor.update(val))
+            .success(function(event){
+                _this.request.eventListener.push('updated', event, _this.request);
+            });
+    }
+}
+                
 requestCursor.prototype.success = function(success) {
     var _this = this;
     var timer;
@@ -245,7 +342,7 @@ requestCursor.prototype.success = function(success) {
             clearTimeout(timer);
         timer = setTimeout(function(){
             if(!cursor)
-                _this.eventListener.push('end');
+                _this.eventListener.push('end', _this.context, _this);
             else
                 rebuildTimer();
         }, 1);
@@ -261,8 +358,12 @@ requestCursor.prototype.success = function(success) {
 
             //var readyState = event.target.readyState;
 
-            if(!_this.context || !_this.context.predicate || _this.context.predicate(cursor.value))
+            if(!_this.context || !_this.context.predicate || _this.context.predicate(cursor.value)) {
+                _this.context.cursor = cursor;
+                _this.context.prototype = _this.contextProto;
+
                 success.call(this, event, _this.context);
+            }
             
             //if(readyState == 2 /*DONE*/) // it does not werk readyState always 2 (DONE)
             //    _this.eventListener.push('end');
