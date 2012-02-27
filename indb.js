@@ -182,16 +182,21 @@ window.store.prototype = {
     },
     get: function() {
         var result;
+        var len = arguments.length;
+        var a = arguments;
         
         this.currentRequest = null;
 
-        if(arguments.length == 1 && !isFunction(arguments[0]))
-            result = new request(this.store.get(arguments[0]));
-        if(arguments.length == 1 && isFunction(arguments[0]))
-            result = new requestCursor(this.cursorFromQuery(arguments[0]) || this.store.openCursor(null, idbCursor.PREV));
-        if(arguments.length == 2)
-            result = new request(this.store.index(arguments[0]).get(arguments[1]));
-        if(arguments.length <= 0) {
+        if(len == 1 && !isFunction(a[0]))
+            result = new request(this.store.get(a[0]));
+
+        if(len == 1 && isFunction(a[0]))
+            result = new requestCursor(this.cursorFromQuery(a[0]) || this.store.openCursor(null, idbCursor.PREV));
+
+        if(len == 2)
+            result = new request(this.store.index(a[0]).get(a[1]));
+
+        if(len <= 0) {
             result = new requestCursor(this.store.openCursor(null, idbCursor.PREV));
         }
         
@@ -372,7 +377,7 @@ requestCursor.prototype.success = function(success) {
                 success.call(this, event, _this.context);
             }
             
-            //if(readyState == 2 /*DONE*/) // it does not werk readyState always 2 (DONE)
+            //if(readyState == 2 /*DONE*/) // it does not work readyState always 2 (DONE)
             //    _this.eventListener.push('end');
             //});            
 
