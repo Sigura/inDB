@@ -1,9 +1,10 @@
 ## About
 wrapper for asynchronous indexedDB API like jQuery style
 
-## Samples of usage
-see main.js
+## Actual samples of usage
+see https://github.com/Sigura/inDB/blob/master/main.js
 
 ## Plans
 1. create linqjs provider for IDBKeyRange
-2. may be add trigger events and move eventListener to Rx events model
+2. may be move eventListener to Rx events model
+

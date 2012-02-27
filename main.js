@@ -25,11 +25,10 @@ var init = function(event) {
         });
 
 };
-var errorHandler = function(event) { console.error('get error', event); };
 
 var $db = new inDB({ name: 'testDatabase', version: 42 })
 .error(errorHandler)
-//before ready
+// before ready
 .init(init)
 .versionChange( function(event) {
     console.log('version changed, timeStamp:', event.timeStamp, ', new version:', this.version);
@@ -61,8 +60,8 @@ var $db = new inDB({ name: 'testDatabase', version: 42 })
         });
     });
 
+    // get by key
     $store
-        //get by key
         .get('444-44-4444')
         .error(errorHandler)
         .success(function(event) {
@@ -76,32 +75,32 @@ var $db = new inDB({ name: 'testDatabase', version: 42 })
             //$db.close();
         });
 
+    // get one by index
     $store
-        //get one by index
         .get('name', 'Artur')
         .error(errorHandler)
         .success(function(event) {
             console.info('found', this.result);
         });
 
+    // get all. cursor way
     $store
-        //get all. cursor way
         .get()
-        //add filter, in future may be add support that - linq js
+        // add filter, in future may be add support that - linq js
         .where(function(item){
             return item.age > 20 && item.email.substr(-8).toLowerCase() != 'home.org';
         })
         .error(errorHandler)
-        //begin read
+        // begin read
         .start(function(context) {
             console.time('get all');
             context.result = [];
         })
-        //read ended
+        // read ended
         .ended(function(context) {
             console.timeEnd('get all', context.result);
         })
-        //read next, must be at the end in this case
+        // read next, must be at the end in this case
         .success(function(event, context) {
             var customer = this.result.value;
 
@@ -110,27 +109,27 @@ var $db = new inDB({ name: 'testDatabase', version: 42 })
             context.result.push(customer);
         });
 
+    // new transaction for update
     $store
-         // new transaction for update
         .cloneTran()
-        //get all by IDBKeyRange. cursor way
+        // get all by IDBKeyRange. cursor way
         .get(function(query) {
              return query
-                    //.lowerBound('name', 'Bill') // all name ≥ 'Bill'
+                    // .lowerBound('name', 'Bill') // all name ≥ 'Bill'
                     .bound('age', 30, 60, true, true); // all age 30 > x && < 60
-                    //only one predicate by design index db, please use where after get
+                    // only one predicate by design index db, please use where after get
         })
         .error(errorHandler)
-        //begin read
+        // begin read
         .start(function(context) {
             context.result = [];
             console.time('get all by IDBKeyRange');
         })
-        //read ended
+        // read ended
         .ended(function(context) {
             console.timeEnd('get all by IDBKeyRange', context.result);
         })
-        //read next, must be at the end in this case
+        // read next, must be at the end in this case
         .success(function(event, context) {
             var customer = this.result.value;
 
@@ -140,13 +139,14 @@ var $db = new inDB({ name: 'testDatabase', version: 42 })
 
                 ++customer.age;
 
-                //only for cursor
+                // only for cursor
                 context.update(customer);
             }
 
             context.result.push(customer);
         });
 
+    // add tdd entity
     $store
         .cloneTran()
         .add(tdd)
@@ -155,12 +155,14 @@ var $db = new inDB({ name: 'testDatabase', version: 42 })
                 // build new read only transaction
                 var $reStore = $db.openStore('customers', this.read);
 
+                // get chnaged entity 1
                 $reStore.get(tdd.ssn)
                     .success(function(event){
                         console.log('added:', this.result.ssn, this.result);
                         $store.cloneTran().del(this.result.ssn);
                     });
 
+                // get chnaged entity 2
                 // build new transaction as old store transaction
                 $store.cloneTran()
                     .get('111-11-1111')
@@ -170,6 +172,7 @@ var $db = new inDB({ name: 'testDatabase', version: 42 })
 
         });
 
+    // get count
     // WebKit, as of 2012-02-22, does not yet implement this. 
     $store.count()
         .success(function(event){
@@ -178,4 +181,5 @@ var $db = new inDB({ name: 'testDatabase', version: 42 })
         .error(errorHandler);
 });
 
+function errorHandler(event) { console.error('get error', event); };
 setTimeout(function(){$db.remove(); console.log('removed all by timeout');}, 5000);
