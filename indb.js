@@ -128,14 +128,16 @@ window.store.prototype = {
             });
     },
     count: function(){
-        return new request(this.store.count());
+        // WebKit, as of 2012-02-22, does not yet implement this. 
+        return this.store['count']
+            ? new request(this.store.count())
+            : new requestError({error: 'count isn\'t implemented'});
     },
     add: function(val) {
 
         if(!(val instanceof Array)) {
             return new request(this._add(val));
         }
-
 
         var clone = val.slice();
         var len = clone.length;
@@ -237,6 +239,10 @@ window.store.prototype = {
 
         this.store.transaction.oncomplete = function(event){
             _this.eventListener.push('complete', event, _this);
+
+            if(_this.currentRequest) {
+                _this.currentRequest.eventListener.push('end', event, _this.currentRequest);
+            }
         };
 
         this.store.transaction.onabort = function(event){
@@ -317,9 +323,22 @@ var requestCursor = function(req) {
 
     this.context = new this._contextCtr(this);
     this.context.request = this;
+
+    return this;
+}; 
+
+var requestError = function(error) {
+    this.__ctor();
+    var _this = this;
+    setTimeout(function(){
+        _this.eventListener.push('error', error, _this);
+    }, 5);
+
+    return this;
 }; 
 
 requestCursor.prototype = new request();
+requestError.prototype = new request();
 
 requestCursor.prototype._contextCtr = function(req){this.request = req};
 requestCursor.prototype._contextCtr.prototype = {
@@ -337,23 +356,11 @@ requestCursor.prototype._contextCtr.prototype = {
 requestCursor.prototype.success = function(success) {
     var _this = this;
     var timer;
-    var rebuildTimer = function(cursor){
-        if(timer)
-            clearTimeout(timer);
-        timer = setTimeout(function(){
-            if(!cursor)
-                _this.eventListener.push('end', _this.context, _this);
-            else
-                rebuildTimer();
-        }, 1);
-    };
 
     this.eventListener.add('success', function(event) {
         var cursor = event.target.result;
         var store = event.target.source;
 
-        rebuildTimer(cursor);
-        
         if (cursor) {
 
             //var readyState = event.target.readyState;
@@ -532,7 +539,7 @@ var each = function (array, action, options) {
 }
 
 var isFunction = function (obj) {
- return obj && ({}).toString.call(obj) == '[object Function]';
+    return obj && ({}).toString.call(obj) == '[object Function]';
 }
 
 })(window['jQuery']);

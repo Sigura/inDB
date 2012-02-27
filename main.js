@@ -15,6 +15,9 @@ var init = function(event) {
         .createIndex('name', { unique: false })
         .createIndex('age', { unique: false })
         .createIndex('email', { unique: true })
+        .complete(function(event) {
+            console.info('store customers created', event);
+        })
         .add(customerData)
         .error(errorHandler)
         .success(function(event) {
@@ -67,7 +70,7 @@ var $db = new inDB({ name: 'testDatabase', version: 42 })
 
             $store.del('555-55-5555')
                 .success(function(event){
-                    console.log('object deleted', event);
+                    console.log('customer Donna deleted', event);
                 });
 
             //$db.close();
@@ -135,12 +138,11 @@ var $db = new inDB({ name: 'testDatabase', version: 42 })
 
             if(customer.ssn == '111-11-1111') {
 
-                customer.age -= 10;
+                ++customer.age;
 
                 //only for cursor
                 context.update(customer);
             }
-
 
             context.result.push(customer);
         });
@@ -166,8 +168,14 @@ var $db = new inDB({ name: 'testDatabase', version: 42 })
                         console.log('updated:', this.result.ssn, this.result);
                     });
 
-    });
+        });
+
+    // WebKit, as of 2012-02-22, does not yet implement this. 
+    $store.count()
+        .success(function(event){
+            console.info('count:', this.result);
+        })
+        .error(errorHandler);
 });
 
-//setTimeout(function(e){console.log('init by timeout');$db._init(e);}, 2500);
 setTimeout(function(){$db.remove(); console.log('removed all by timeout');}, 5000);
