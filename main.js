@@ -133,11 +133,11 @@ var $db = new inDB({ name: 'testDatabase', version: 42 })
         .success(function(event, context) {
             var customer = this.result.value;
 
-            console.info('getted by IDBKeyRange', customer.ssn, customer);
+            console.info('getted by IDBKeyRange', customer.ssn, customer, event, this);
 
             if(customer.ssn == '111-11-1111') {
 
-                ++customer.age;
+                customer.age = 6;
 
                 // only for cursor
                 context.update(customer);
@@ -153,7 +153,7 @@ var $db = new inDB({ name: 'testDatabase', version: 42 })
         .success(function(event){
     
                 // build new read only transaction
-                var $reStore = $db.openStore('customers', this.read);
+                var $reStore = $db.openStore('customers');
 
                 // get chnaged entity 1
                 $reStore.get(tdd.ssn)

@@ -432,6 +432,7 @@ window.inDB.prototype = {
         this.eventListener.add('error', error);
         return this;
     },
+    verChanged: 'VERSION_CHANGED',
     readWrite: 'READ_WRITE',
     read: 'READ_ONLY',
     _versionChange: function(event) {

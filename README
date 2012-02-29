@@ -1,5 +1,5 @@
 ## About
-wrapper for asynchronous indexedDB API like jQuery style
+jQuery style wrapper for asynchronous indexedDB API
 
 ## Actual samples of usage
 see https://github.com/Sigura/inDB/blob/master/main.js
